@@ -1,0 +1,16 @@
+{
+  "sites_category" :
+          [
+            {"HOST": "google", "category_id": 1},
+            {"HOST": "facebook", "category_id": 2}
+          ],
+  "categories" :
+          [
+            {"id": 1, "title": "kari", "duration": 1, "limit": 0},
+            {"id": 2, "title": "kalak", "duration": 1, "limit": 250}
+          ],
+  "log_config" : {
+    "file_name": "access.log",
+    "cache": false
+  }
+}
