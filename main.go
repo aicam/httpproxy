@@ -3,15 +3,19 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"github.com/aicam/httpproxy/server"
+	"github.com/aicam/jsonconfig"
+	"github.com/gin-gonic/gin"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"strings"
-	"github.com/aicam/jsonconfig"
 )
+
 var Config jsonconfig.Configuration
+
 // Hop-by-hop headers. These are removed when sent to the backend.
 // http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html
 var hopHeaders = []string{
@@ -52,11 +56,12 @@ func appendHostToXForwardHeader(header http.Header, host string) {
 type proxy struct {
 }
 type LogFormat struct {
-	HOST string `json:"host"`
-	Path string `json:"path"`
-	Fragment string `json:"fragment"`
-	CategoryID uint `json:"category_id"`
+	HOST       string `json:"host"`
+	Path       string `json:"path"`
+	Fragment   string `json:"fragment"`
+	CategoryID uint   `json:"category_id"`
 }
+
 func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	//log.Println(req.RemoteAddr, " ", req.Method, " ", req.URL)
 	var category uint
@@ -71,10 +76,10 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 		Fragment:   req.URL.Fragment,
 		CategoryID: category,
 	})
-	_, _ = File.Write(js)
+	_, _ = File.Write(append(js, byte(',')))
 	_, _ = File.Write([]byte("\n"))
 	if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
-		msg := "unsupported protocal scheme "+req.URL.Scheme
+		msg := "unsupported protocal scheme " + req.URL.Scheme
 		http.Error(wr, msg, http.StatusBadRequest)
 		log.Println(msg)
 		return
@@ -82,8 +87,6 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 
 	client := &http.Client{}
 
-	//http: Request.RequestURI can't be set in client requests.
-	//http://golang.org/src/pkg/net/http/client.go
 	req.RequestURI = ""
 
 	delHopHeaders(req.Header)
@@ -95,7 +98,7 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	resp, err := client.Do(req)
 	if err != nil {
 		http.Error(wr, "Server Error", http.StatusInternalServerError)
-		//log.Fatal("ServeHTTP:", err)
+		log.Print("ServeHTTP:", err)
 	}
 	defer resp.Body.Close()
 
@@ -107,8 +110,10 @@ func (p *proxy) ServeHTTP(wr http.ResponseWriter, req *http.Request) {
 	wr.WriteHeader(resp.StatusCode)
 	io.Copy(wr, resp.Body)
 }
+
 var File *os.File
 var Categories map[uint]string
+
 func main() {
 	var addr = flag.String("addr", "127.0.0.1:8080", "The addr of the application.")
 	flag.Parse()
@@ -120,7 +125,21 @@ func main() {
 	}
 	File, _ = os.OpenFile("access.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	log.Println("Starting proxy server on", *addr)
-	if err := http.ListenAndServe(*addr, handler); err != nil {
-		log.Fatal("ListenAndServe:", err)
-	}
+	go http.ListenAndServe(*addr, handler)
+	router := gin.Default()
+	var configJS jsonconfig.Configuration
+	router.GET("/read_config-file", func(context *gin.Context) {
+		context.String(http.StatusOK, server.ReadConfig("./user-config.json"))
+	})
+	router.POST("/write_config-file", func(context *gin.Context) {
+		context.BindJSON(&configJS)
+		server.WriteConfig("./user-config.json", configJS)
+		context.JSON(http.StatusOK, struct {
+			Status bool `json:"status"`
+		}{Status: true})
+	})
+	router.GET("/info", func(context *gin.Context) {
+		context.String(http.StatusOK, string(server.GetInfo(Categories, Config.Config.FileName, Config)))
+	})
+	_ = router.Run("0.0.0.0:4300")
 }
