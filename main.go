@@ -5,12 +5,15 @@ import (
 	"flag"
 	"github.com/aicam/httpproxy/server"
 	"github.com/aicam/jsonconfig"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -127,6 +130,7 @@ func main() {
 	log.Println("Starting proxy server on", *addr)
 	go http.ListenAndServe(*addr, handler)
 	router := gin.Default()
+	router.Use(cors.Default())
 	var configJS jsonconfig.Configuration
 	router.GET("/read_config-file", func(context *gin.Context) {
 		context.String(http.StatusOK, server.ReadConfig("./user-config.json"))
@@ -140,6 +144,15 @@ func main() {
 	})
 	router.GET("/info", func(context *gin.Context) {
 		context.String(http.StatusOK, string(server.GetInfo(Categories, Config.Config.FileName, Config)))
+	})
+	router.NoRoute(func(context *gin.Context) {
+		dir, file := path.Split(context.Request.RequestURI)
+		ext := filepath.Ext(file)
+		if file == "" || ext == "" {
+			context.File("./dist/httpproxy-front/index.html")
+		} else {
+			context.File("./dist/httpproxy-front/" + path.Join(dir, file))
+		}
 	})
 	_ = router.Run("0.0.0.0:4300")
 }

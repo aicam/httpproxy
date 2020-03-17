@@ -29,8 +29,16 @@ func GetInfo(categories map[uint]string, filename string, configuration jsonconf
 		CategoryID uint   `json:"category_id"`
 	}
 	var logArray []Log
+	file = append([]byte{byte('[')}, file...)
+	file = file[:len(file)-1]
+	file = append(file, byte(']'))
 	_ = json.Unmarshal(file, &logArray)
+	type categoryGroupedStruct struct {
+		Title string `json:"title"`
+		Count int    `json:"count"`
+	}
 	categoryGrouped := make(map[string]int)
+	var responseStruct []categoryGroupedStruct
 	for _, category := range configuration.Categories {
 		for _, selfLog := range logArray {
 			if category.ID == selfLog.CategoryID {
@@ -38,6 +46,12 @@ func GetInfo(categories map[uint]string, filename string, configuration jsonconf
 			}
 		}
 	}
-	respJS, _ := json.Marshal(categoryGrouped)
+	for title, i := range categoryGrouped {
+		responseStruct = append(responseStruct, categoryGroupedStruct{
+			Title: title,
+			Count: i,
+		})
+	}
+	respJS, _ := json.Marshal(responseStruct)
 	return respJS
 }
